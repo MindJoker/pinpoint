@@ -1,0 +1,112 @@
+{% extends 'master.html' %}
+{% load static %}
+
+{% block content %}
+
+<link rel="stylesheet" href="{% static './css/route_select.css' %}">
+<script src='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.js'></script>
+<link href='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.css' rel='stylesheet' />
+<script        
+    id="search-js"
+    defer
+    src="https://api.mapbox.com/search-js/v1.0.0-beta.19/web.js">
+</script>
+<link href="https://api.mapbox.com/mapbox-assembly/v1.3.0/assembly.min.css" rel="stylesheet">  
+<script>
+    const script = document.getElementById('search-js');
+        script.onload = function() {
+            mapboxsearch.autofill({
+                accessToken: 'pk.eyJ1IjoibWluZGpva2VyIiwiYSI6ImNsdWxjcjYzZTB0czYyamxpb2R5M3lxMjAifQ.ydyaRBNLz46ty1BCdT_otQ'
+            });
+        };  
+</script>
+
+
+<div class="main">
+    <div class="container">
+        <h1>Select Route</h1>
+        <form action="{% url 'nav' id=user.operator.id %}" method="post" class="prose flex flex--column">
+            {% csrf_token %}
+            
+            <h3>Shipping</h3>  
+            <mapbox-address-autofill>  
+                <input id='A' type="text" class="input mb12" name="address" autocomplete="shipping address-line1" placeholder="Point A">  
+            </mapbox-address-autofill>  
+            
+            <mapbox-address-autofill>  
+                <input id='B' type="text" class="input mb12" name="address" autocomplete="shipping address-line1" placeholder="Point B">  
+            </mapbox-address-autofill>  
+            <input type="submit" value="Submit">
+        </form>
+    </div>
+</div>
+
+<script>
+
+    
+mapboxgl.accessToken = 'pk.eyJ1IjoibWluZGpva2VyIiwiYSI6ImNsdWxjcjYzZTB0czYyamxpb2R5M3lxMjAifQ.ydyaRBNLz46ty1BCdT_otQ';
+
+document.addEventListener('DOMContentLoaded', async function() {
+    const form = document.querySelector('form');
+    
+    form.addEventListener('submit', async function(event) {
+        event.preventDefault();
+    
+        const startAddress = document.getElementById('A').value;
+        const endAddress = document.getElementById('B').value;
+    
+        // Get coordinates for start and end addresses
+        const startCoordinates = await getCoordinates(startAddress);
+        const endCoordinates = await getCoordinates(endAddress);
+    
+        if (startCoordinates && endCoordinates) {
+            // Now you have the coordinates, you can submit them to your Django view
+            // You can submit them as JSON data
+            const postData = {
+                startAddress: startCoordinates,
+                endAddress: endCoordinates
+            };
+    
+            const response = await fetch(window.location.href, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify(postData)
+            });
+    
+            const responseData = await response.json();
+            
+            if (responseData.success) {
+                // Redirect to nav.html with id and coordinates
+                window.location.href = `/nav/${id}/${startCoordinates.lat},${startCoordinates.lng}/${endCoordinates.lat},${endCoordinates.lng}`;
+            } else {
+                // Handle error
+                console.log('Error saving data');
+            }
+        }
+    });
+});
+
+const getCoordinates = async (address) => {
+    const response = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${address}.json?access_token=pk.eyJ1IjoibWluZGpva2VyIiwiYSI6ImNsdWxjcjYzZTB0czYyamxpb2R5M3lxMjAifQ.ydyaRBNLz46ty1BCdT_otQ`);
+    const data = await response.json();
+    
+    if (data.features && data.features.length > 0) {
+        const coordinates = data.features[0].geometry.coordinates;
+        const centerCoordinates = data.features[0].center;
+        
+        return { 
+            lat: coordinates[1], 
+            lng: coordinates[0],
+            centerLat: centerCoordinates[1],
+            centerLng: centerCoordinates[0]
+        };
+    } else {
+        return null;
+    }
+}
+</script>
+
+{% endblock %}

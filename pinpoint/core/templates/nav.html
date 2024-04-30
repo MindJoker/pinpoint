@@ -1,0 +1,198 @@
+{% extends 'master.html' %}
+{% load static %}
+{% block content %}
+
+<title>Mapbox Routing and Tracking</title>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.js"></script>
+
+<!-- Load Mapbox Directions plugin before initializing MapboxDirections -->
+<script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.3.1/mapbox-gl-directions.js"></script>
+<link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.3.1/mapbox-gl-directions.css" type="text/css">
+
+<style>
+body { margin: 0; padding: 0; }
+#container {
+    position: relative;
+    height: 100vh; /* Set container height to viewport height */
+}
+#map {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+    z-index: 0; /* Lower z-index for the map */
+}
+#directionsToggle {
+    position: absolute;
+    bottom: 20px; /* Adjust top position */
+    left: 20px; /* Adjust left position */
+    z-index: 1; /* Ensure it's above the map */
+}
+</style>
+
+</head>
+<body>
+
+<div id="container">
+   {% comment %}
+     <div id="directionsToggle">
+         <button id="toggleDirections">Toggle Directions</button>
+     </div>
+   {% endcomment %}
+    <div id="map"></div>
+</div>
+
+<script>
+const api_key = '{{ API_KEY }}';
+mapboxgl.accessToken = api_key;
+
+// Initialize MapboxDirections after the plugin script is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    const directions = new MapboxDirections({
+        accessToken: mapboxgl.accessToken
+    });
+
+    // Use the Geolocation API to get the user's current location
+    navigator.geolocation.getCurrentPosition(function(position) {
+        // Create a new map centered at the user's current location
+        const map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/streets-v12',
+            center: [position.coords.longitude, position.coords.latitude],
+            zoom: 13
+        });
+
+        // Add an event listener for window resize
+        window.addEventListener('resize', function() {
+            // Call the resize method on the directions object to update the directions control
+            directions.resize();
+        });
+
+      /*  const toggleButton = document.getElementById('toggleDirections');
+        const directionsContainer = document.querySelector('.directions-control');
+
+        toggleButton.addEventListener('click', function() {
+            if (directionsContainer.style.display === 'block') {
+                directionsContainer.style.display = 'none';
+            } else {
+                directionsContainer.style.display = 'block';
+            }
+        });*/
+
+        map.addControl(new mapboxgl.GeolocateControl({
+            positionOptions: {
+                enableHighAccuracy: true
+            },
+            trackUserLocation: true,
+            showUserHeading: true
+        }));
+
+        // Add the directions control to the map
+        map.addControl(directions, 'top-left');
+
+        // Add zoom and rotation controls to the map.
+        map.addControl(new mapboxgl.NavigationControl());
+
+        const mapDiv = document.getElementById('map');
+        if (mapDiv.style.visibility === 'visible') map.resize();
+
+        // Set the start point for the directions control
+        directions.setOrigin([position.coords.longitude, position.coords.latitude]);
+    }, function(error) {
+        console.error('Error getting location: ' + error.message);
+    });
+    document.addEventListener('DOMContentLoaded', function() {
+        navigator.geolocation.getCurrentPosition(function(position) {
+            const latitude = position.coords.latitude;
+            const longitude = position.coords.longitude;
+            
+            // Send the location data to Django view using AJAX
+            fetch(`/nav/${operator_id}/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': '{{ csrf_token }}'  // Add CSRF token from Django
+                },
+                body: `latitude=${latitude}&longitude=${longitude}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    console.log(data.message);
+                } else {
+                    console.error(data.message);
+                }
+    
+                // Use the fetched data
+                const s_lat = data.s_lat;
+                const s_long = data.s_long;
+                const e_lat = data.e_lat;
+                const e_long = data.e_long;
+                const n_lat = data.n_lat;
+                const n_long = data.n_long;
+    
+                
+                const map = new mapboxgl.Map({
+                    container: 'map',
+                    style: 'mapbox://styles/mapbox/streets-v11',
+                    center: [longitude, latitude],
+                    zoom: 13
+                });
+    
+                // Add map controls
+                map.addControl(new mapboxgl.NavigationControl());
+    
+                // Add markers for start and end locations
+                if (s_lat && s_long) {
+                    new mapboxgl.Marker().setLngLat([s_long, s_lat]).addTo(map);
+                }
+                if (e_lat && e_long) {
+                    new mapboxgl.Marker().setLngLat([e_long, e_lat]).addTo(map);
+                }
+    
+                // Update operator's current location
+                if (n_lat && n_long) {
+                    const operatorMarker = new mapboxgl.Marker({ color: 'blue' })
+                        .setLngLat([n_long, n_lat])
+                        .addTo(map);
+                }
+    
+                // Handle directions control
+                const directions = new MapboxDirections({
+                    accessToken: mapboxgl.accessToken,
+                    unit: 'metric',
+                    profile: 'mapbox/driving',
+                    controls: {
+                        instructions: false
+                    }
+                });
+    
+                map.addControl(directions, 'top-left');
+    
+                const toggleDirectionsBtn = document.getElementById('toggleDirectionsBtn');
+                const directionsContainer = document.querySelector('.mapbox-directions-control');
+    
+                toggleDirectionsBtn.addEventListener('click', function() {
+                    if (directionsContainer.style.display === 'none' || directionsContainer.style.display === '') {
+                        directionsContainer.style.display = 'block';
+                    } else {
+                        directionsContainer.style.display = 'none';
+                    }
+                });
+    
+            })
+            .catch(error => {
+                console.error('Error sending location data:', error);
+            });
+    
+        }, function(error) {
+            console.error('Error getting location: ' + error.message);
+        });
+    });
+});
+
+</script>
+
+{% endblock %}
+
